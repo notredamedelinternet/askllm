@@ -228,15 +228,15 @@ def ask(provider: Provider, prompt: str, model: str | None = None, timeout: int 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="free-llm",
+        prog="askllm",
         description="Ask a question using whichever free-tier LLM cloud key you have configured.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent(
             """\
             Examples:
-              mojo src/free_llm.mojo --provider google "Explain DNS in one paragraph"
-              mojo src/free_llm.mojo --provider groq --model llama-3.1-8b-instant "Write a haiku"
-              echo "Summarize this" | mojo src/free_llm.mojo --provider mistral
+              pixi run askllm --provider google "Explain DNS in one paragraph"
+              pixi run askllm --provider groq --model llama-3.1-8b-instant "Write a haiku"
+              echo "Summarize this" | pixi run askllm --provider mistral
             """
         ),
     )
@@ -276,7 +276,7 @@ def main(argv: list[str] | None = None) -> int:
     if not prompt and not sys.stdin.isatty():
         prompt = sys.stdin.read().strip()
     if not prompt:
-        print("free-llm: error: provide a question or pipe text on stdin", file=sys.stderr)
+        print("askllm: error: provide a question or pipe text on stdin", file=sys.stderr)
         sys.stderr.flush()
         return 2
 
@@ -290,7 +290,7 @@ def main(argv: list[str] | None = None) -> int:
             return 1
         return 0
     except RuntimeError as exc:
-        print(f"free-llm: error: {exc}", file=sys.stderr)
+        print(f"askllm: error: {exc}", file=sys.stderr)
         sys.stderr.flush()
         return 1
 

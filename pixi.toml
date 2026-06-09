@@ -11,5 +11,5 @@ mojo = "*"
 python = ">=3.11,<3.14"
 
 [tasks]
-ask = "mojo src/free_llm.mojo"
+askllm = "mojo src/free_llm.mojo"
 test = "python -m unittest discover -s tests"

@@ -63,31 +63,31 @@ export GOOGLE_API_KEY="..."
 Ask a question:
 
 ```sh
-pixi run ask --provider google "Explain DNS in one paragraph"
+pixi run askllm --provider google "Explain DNS in one paragraph"
 ```
 
 Let the CLI choose the first configured provider:
 
 ```sh
-pixi run ask "What is a vector database?"
+pixi run askllm "What is a vector database?"
 ```
 
 Pipe input:
 
 ```sh
-echo "Summarize HTTP caching" | pixi run ask --provider groq
+echo "Summarize HTTP caching" | pixi run askllm --provider groq
 ```
 
 Use a different model:
 
 ```sh
-pixi run ask --provider mistral --model mistral-large-latest "Draft a concise release note"
+pixi run askllm --provider mistral --model mistral-large-latest "Draft a concise release note"
 ```
 
 Check setup:
 
 ```sh
-pixi run ask --list-providers
+pixi run askllm --list-providers
 ```
 
 Run tests:
