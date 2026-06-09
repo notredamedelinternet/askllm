@@ -21,13 +21,36 @@ Free tiers, trial credits, model names, and rate limits change. This tool does n
 
 ## Install
 
-Install Mojo with `pixi`:
+Install Pixi first:
+
+```sh
+curl -fsSL https://pixi.sh/install.sh | sh
+```
+
+Restart your shell, or source your shell config so `pixi` is on your `PATH`:
+
+```sh
+source ~/.zshrc
+```
+
+Clone this repository and enter it:
+
+```sh
+git clone https://github.com/notredamedelinternet/free-llm-mojo.git
+cd free-llm-mojo
+```
+
+Install Mojo and Python into the project environment:
 
 ```sh
 pixi install
 ```
 
-Or follow the current Mojo install instructions from Modular, then run the `.mojo` file directly.
+Check that Mojo is available:
+
+```sh
+pixi run mojo --version
+```
 
 ## Usage
 
