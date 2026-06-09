@@ -1,0 +1,15 @@
+[project]
+name = "free-llm-mojo"
+version = "0.1.0"
+description = "A Mojo CLI that asks questions through free-tier LLM cloud APIs."
+authors = ["vibe"]
+channels = ["https://conda.modular.com/max/", "conda-forge"]
+platforms = ["osx-arm64", "osx-64", "linux-64", "linux-aarch64"]
+
+[dependencies]
+mojo = "*"
+python = ">=3.11,<3.14"
+
+[tasks]
+ask = "mojo src/free_llm.mojo"
+test = "python -m unittest discover -s tests"
