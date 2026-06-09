@@ -253,10 +253,19 @@ def print_provider_status() -> None:
         provider = PROVIDERS[name]
         status = "configured" if os.getenv(provider.key_env) else "missing key"
         print(f"{name:10} {status:12} env={provider.key_env} default={provider.default_model}")
+    sys.stdout.flush()
 
 
 def main(argv: list[str] | None = None) -> int:
+    if argv is None:
+        argv = sys.argv[1:]
+
     parser = build_parser()
+    if "-h" in argv or "--help" in argv:
+        print(parser.format_help())
+        sys.stdout.flush()
+        return 0
+
     args = parser.parse_args(argv)
 
     if args.list_providers:
@@ -267,11 +276,33 @@ def main(argv: list[str] | None = None) -> int:
     if not prompt and not sys.stdin.isatty():
         prompt = sys.stdin.read().strip()
     if not prompt:
-        parser.error("provide a question or pipe text on stdin")
+        print("free-llm: error: provide a question or pipe text on stdin", file=sys.stderr)
+        sys.stderr.flush()
+        return 2
 
-    provider = choose_provider(args.provider)
-    print(ask(provider, prompt, model=args.model, timeout=args.timeout))
+    try:
+        provider = choose_provider(args.provider)
+        print(ask(provider, prompt, model=args.model, timeout=args.timeout))
+    except SystemExit as exc:
+        if exc.code:
+            print(exc.code, file=sys.stderr)
+            sys.stderr.flush()
+            return 1
+        return 0
+    except RuntimeError as exc:
+        print(f"free-llm: error: {exc}", file=sys.stderr)
+        sys.stderr.flush()
+        return 1
+
+    sys.stdout.flush()
     return 0
+
+
+def run(argv: list[str] | None = None) -> None:
+    code = main(argv)
+    sys.stdout.flush()
+    sys.stderr.flush()
+    os._exit(code)
 
 
 if __name__ == "__main__":
