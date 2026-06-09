@@ -1,4 +1,4 @@
-# free-llm-mojo
+# askllm
 
 A small Mojo CLI for asking questions through the free-tier or trial-tier APIs of major LLM clouds.
 
@@ -36,8 +36,8 @@ source ~/.zshrc
 Clone this repository and enter it:
 
 ```sh
-git clone https://github.com/notredamedelinternet/free-llm-mojo.git
-cd free-llm-mojo
+git clone https://github.com/notredamedelinternet/askllm.git
+cd askllm
 ```
 
 Install Mojo and Python into the project environment:
