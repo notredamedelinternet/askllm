@@ -19,15 +19,15 @@ Json = dict[str, Any]
 @dataclass(frozen=True)
 class Provider:
     name: str
-    key_env: str
+    key_env: str | None
     default_model: str
-    make_request: Callable[[str, str, str], tuple[str, Json, dict[str, str]]]
+    make_request: Callable[[str | None, str, str], tuple[str, Json, dict[str, str]]]
     parse_response: Callable[[Json], str]
     note: str
 
 
 def _chat_completions_request(
-    api_key: str,
+    api_key: str | None,
     model: str,
     prompt: str,
     *,
@@ -35,10 +35,9 @@ def _chat_completions_request(
     auth_header: str = "Authorization",
     auth_prefix: str = "Bearer ",
 ) -> tuple[str, Json, dict[str, str]]:
-    headers = {
-        "Content-Type": "application/json",
-        auth_header: f"{auth_prefix}{api_key}",
-    }
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers[auth_header] = f"{auth_prefix}{api_key}"
     body = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -49,6 +48,30 @@ def _chat_completions_request(
 
 def _parse_chat_completions(data: Json) -> str:
     return data["choices"][0]["message"]["content"].strip()
+
+
+def _ollama_request(_api_key: str | None, model: str, prompt: str) -> tuple[str, Json, dict[str, str]]:
+    base_url = os.getenv("OLLAMA_HOST", "http://localhost:11434")
+    return (
+        base_url.rstrip("/") + "/api/generate",
+        {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+        },
+        {"Content-Type": "application/json"},
+    )
+
+
+def _parse_ollama(data: Json) -> str:
+    return str(data.get("response", "")).strip()
+
+
+def _local_openai_request(
+    _api_key: str | None, model: str, prompt: str
+) -> tuple[str, Json, dict[str, str]]:
+    base_url = os.getenv("ASKLLM_LOCAL_OPENAI_BASE_URL", "http://localhost:1234/v1")
+    return _chat_completions_request(None, model, prompt, base_url=base_url)
 
 
 def _anthropic_request(api_key: str, model: str, prompt: str) -> tuple[str, Json, dict[str, str]]:
@@ -94,6 +117,22 @@ def _parse_gemini(data: Json) -> str:
 
 
 PROVIDERS: dict[str, Provider] = {
+    "ollama": Provider(
+        name="ollama",
+        key_env=None,
+        default_model="llama3.2",
+        make_request=_ollama_request,
+        parse_response=_parse_ollama,
+        note="Local Ollama API. No API key required.",
+    ),
+    "local-openai": Provider(
+        name="local-openai",
+        key_env=None,
+        default_model="local-model",
+        make_request=_local_openai_request,
+        parse_response=_parse_chat_completions,
+        note="Local OpenAI-compatible API, such as LM Studio or llama.cpp. No API key required.",
+    ),
     "openai": Provider(
         name="openai",
         key_env="OPENAI_API_KEY",
@@ -178,7 +217,11 @@ PROVIDERS: dict[str, Provider] = {
 
 
 def available_providers() -> list[str]:
-    return [name for name, provider in PROVIDERS.items() if os.getenv(provider.key_env)]
+    return [
+        name
+        for name, provider in PROVIDERS.items()
+        if provider.key_env is None or os.getenv(provider.key_env)
+    ]
 
 
 def choose_provider(requested: str | None) -> Provider:
@@ -186,21 +229,18 @@ def choose_provider(requested: str | None) -> Provider:
         if requested not in PROVIDERS:
             raise SystemExit(f"Unknown provider '{requested}'. Try --list-providers.")
         provider = PROVIDERS[requested]
-        if not os.getenv(provider.key_env):
+        if provider.key_env and not os.getenv(provider.key_env):
             raise SystemExit(f"Set {provider.key_env} to use {requested}.")
         return provider
 
     names = available_providers()
     if not names:
-        raise SystemExit(
-            "No provider API key found. Set one of: "
-            + ", ".join(provider.key_env for provider in PROVIDERS.values())
-        )
+        raise SystemExit("No provider available. Try --provider ollama with Ollama running locally.")
     return PROVIDERS[names[0]]
 
 
 def ask(provider: Provider, prompt: str, model: str | None = None, timeout: int = 60) -> str:
-    api_key = os.environ[provider.key_env]
+    api_key = os.environ[provider.key_env] if provider.key_env else None
     selected_model = model or provider.default_model
     url, body, headers = provider.make_request(api_key, selected_model, prompt)
     request = urllib.request.Request(
@@ -229,14 +269,15 @@ def ask(provider: Provider, prompt: str, model: str | None = None, timeout: int 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="askllm",
-        description="Ask a question using whichever free-tier LLM cloud key you have configured.",
+        description="Ask a question using a local no-key LLM or a configured LLM cloud key.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=textwrap.dedent(
             """\
             Examples:
+              pixi run askllm "Explain DNS in one paragraph"
+              pixi run askllm --provider local-openai --model qwen2.5-7b-instruct "Write a haiku"
               pixi run askllm --provider google "Explain DNS in one paragraph"
-              pixi run askllm --provider groq --model llama-3.1-8b-instant "Write a haiku"
-              echo "Summarize this" | pixi run askllm --provider mistral
+              echo "Summarize this" | pixi run askllm --provider ollama
             """
         ),
     )
@@ -251,8 +292,13 @@ def build_parser() -> argparse.ArgumentParser:
 def print_provider_status() -> None:
     for name in sorted(PROVIDERS):
         provider = PROVIDERS[name]
-        status = "configured" if os.getenv(provider.key_env) else "missing key"
-        print(f"{name:10} {status:12} env={provider.key_env} default={provider.default_model}")
+        if provider.key_env is None:
+            status = "no key"
+            env = "-"
+        else:
+            status = "configured" if os.getenv(provider.key_env) else "missing key"
+            env = provider.key_env
+        print(f"{name:12} {status:12} env={env} default={provider.default_model}")
     sys.stdout.flush()
 
 
