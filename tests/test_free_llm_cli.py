@@ -1,4 +1,5 @@
 import os
+import tempfile
 import unittest
 from unittest import mock
 
@@ -39,6 +40,23 @@ class ProviderTests(unittest.TestCase):
             url, _, headers = free_llm_cli._local_openai_request(None, "model", "hello")
         self.assertEqual(url, "http://localhost:9999/v1/chat/completions")
         self.assertNotIn("Authorization", headers)
+
+    def test_env_file_round_trip(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, ".env")
+            free_llm_cli.write_env_file({"OPENAI_API_KEY": 'a"b', "GOOGLE_API_KEY": "c\\d"}, path)
+            self.assertEqual(
+                free_llm_cli.read_env_file(path),
+                {"OPENAI_API_KEY": 'a"b', "GOOGLE_API_KEY": "c\\d"},
+            )
+
+    def test_load_env_file_does_not_override_shell(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = os.path.join(tmpdir, ".env")
+            free_llm_cli.write_env_file({"OPENAI_API_KEY": "from-file"}, path)
+            with mock.patch.dict(os.environ, {"OPENAI_API_KEY": "from-shell"}, clear=True):
+                free_llm_cli.load_env_file(path)
+                self.assertEqual(os.environ["OPENAI_API_KEY"], "from-shell")
 
 
 if __name__ == "__main__":

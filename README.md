@@ -56,6 +56,12 @@ pixi run mojo --version
 
 ## Usage
 
+Run setup to save API keys or local server settings in a gitignored `.env` file:
+
+```sh
+pixi run askllm setup
+```
+
 By default, `askllm` uses local Ollama with no API key. Install Ollama separately, pull a model, and ask a question:
 
 ```sh
@@ -74,6 +80,12 @@ For cloud providers, set at least one provider key:
 
 ```sh
 export GOOGLE_API_KEY="..."
+```
+
+You can also save cloud provider keys with setup instead of exporting them every shell session:
+
+```sh
+pixi run askllm setup
 ```
 
 Ask a question:

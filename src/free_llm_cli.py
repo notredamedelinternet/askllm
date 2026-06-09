@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import sys
@@ -14,6 +15,7 @@ from typing import Any, Callable
 
 
 Json = dict[str, Any]
+ENV_FILE = ".env"
 
 
 @dataclass(frozen=True)
@@ -114,6 +116,57 @@ def _gemini_request(api_key: str, model: str, prompt: str) -> tuple[str, Json, d
 def _parse_gemini(data: Json) -> str:
     parts = data["candidates"][0]["content"]["parts"]
     return "\n".join(part.get("text", "") for part in parts).strip()
+
+
+def _quote_env_value(value: str) -> str:
+    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+    return f'"{escaped}"'
+
+
+def _parse_env_line(line: str) -> tuple[str, str] | None:
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or "=" not in stripped:
+        return None
+    key, value = stripped.split("=", 1)
+    key = key.strip()
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+        value = value[1:-1]
+    value = value.replace('\\"', '"').replace("\\\\", "\\")
+    return key, value
+
+
+def read_env_file(path: str = ENV_FILE) -> dict[str, str]:
+    values: dict[str, str] = {}
+    if not os.path.exists(path):
+        return values
+    with open(path, "r", encoding="utf-8") as handle:
+        for line in handle:
+            parsed = _parse_env_line(line)
+            if parsed:
+                key, value = parsed
+                values[key] = value
+    return values
+
+
+def write_env_file(values: dict[str, str], path: str = ENV_FILE) -> None:
+    lines = [
+        "# askllm local configuration",
+        "# This file may contain API keys. Do not commit it.",
+    ]
+    for key in sorted(values):
+        lines.append(f"{key}={_quote_env_value(values[key])}")
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write("\n".join(lines) + "\n")
+    try:
+        os.chmod(path, 0o600)
+    except OSError:
+        pass
+
+
+def load_env_file(path: str = ENV_FILE) -> None:
+    for key, value in read_env_file(path).items():
+        os.environ.setdefault(key, value)
 
 
 PROVIDERS: dict[str, Provider] = {
@@ -274,6 +327,7 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=textwrap.dedent(
             """\
             Examples:
+              pixi run askllm setup
               pixi run askllm "Explain DNS in one paragraph"
               pixi run askllm --provider local-openai --model qwen2.5-7b-instruct "Write a haiku"
               pixi run askllm --provider google "Explain DNS in one paragraph"
@@ -302,9 +356,62 @@ def print_provider_status() -> None:
     sys.stdout.flush()
 
 
+def cloud_key_envs() -> list[tuple[str, str]]:
+    return [
+        (name, provider.key_env)
+        for name, provider in PROVIDERS.items()
+        if provider.key_env is not None
+    ]
+
+
+def run_setup(path: str = ENV_FILE) -> int:
+    existing = read_env_file(path)
+    updated = dict(existing)
+    print(f"askllm setup writes local configuration to {path}.")
+    print("Press Enter to keep an existing value or skip a provider.")
+    print("Local providers like ollama do not need API keys.")
+    print()
+    sys.stdout.flush()
+
+    for name, key_env in cloud_key_envs():
+        current = "configured" if os.getenv(key_env) or existing.get(key_env) else "empty"
+        prompt = f"{name} ({key_env}, {current}): "
+        if sys.stdin.isatty():
+            value = getpass.getpass(prompt).strip()
+        else:
+            value = input(prompt).strip()
+        if value:
+            updated[key_env] = value
+
+    local_base_url = input(
+        "local-openai base URL "
+        f"(ASKLLM_LOCAL_OPENAI_BASE_URL, current: {existing.get('ASKLLM_LOCAL_OPENAI_BASE_URL', 'default')}): "
+    ).strip()
+    if local_base_url:
+        updated["ASKLLM_LOCAL_OPENAI_BASE_URL"] = local_base_url
+
+    ollama_host = input(
+        f"ollama host (OLLAMA_HOST, current: {existing.get('OLLAMA_HOST', 'default')}): "
+    ).strip()
+    if ollama_host:
+        updated["OLLAMA_HOST"] = ollama_host
+
+    write_env_file(updated, path)
+    load_env_file(path)
+    print()
+    print(f"Saved {path}. Run `pixi run askllm --list-providers` to check setup.")
+    sys.stdout.flush()
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     if argv is None:
         argv = sys.argv[1:]
+
+    load_env_file()
+
+    if argv and argv[0] == "setup":
+        return run_setup()
 
     parser = build_parser()
     if "-h" in argv or "--help" in argv:
